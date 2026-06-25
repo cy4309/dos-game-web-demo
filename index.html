@@ -1,0 +1,328 @@
+<!doctype html>
+<html lang="zh-TW">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>金庸群俠傳</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMiAzMiI+CiAgPHJlY3Qgd2lkdGg9IjMyIiBoZWlnaHQ9IjMyIiBmaWxsPSIjMWExMDA4Ii8+CiAgPGxpbmUgeDE9IjE2IiB5MT0iMyIgeDI9IjE2IiB5Mj0iMjQiIHN0cm9rZT0iI2M4OTIyYSIgc3Ryb2tlLXdpZHRoPSIyLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgogIDxwb2x5Z29uIHBvaW50cz0iMTYsMSAxMyw4IDE5LDgiIGZpbGw9IiNjODkyMmEiLz4KICA8cmVjdCB4PSI5IiB5PSIyMSIgd2lkdGg9IjE0IiBoZWlnaHQ9IjIuNSIgcng9IjEiIGZpbGw9IiNjODkyMmEiLz4KICA8cmVjdCB4PSIxNC41IiB5PSIyMy41IiB3aWR0aD0iMyIgaGVpZ2h0PSI2IiByeD0iMSIgZmlsbD0iIzhiNjAyMCIvPgogIDxsaW5lIHgxPSIxNSIgeTE9IjQiIHgyPSIxNSIgeTI9IjIwIiBzdHJva2U9IiNmMGQwODAiIHN0cm9rZS13aWR0aD0iMC44IiBvcGFjaXR5PSIwLjUiLz4KPC9zdmc+" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="https://v8.js-dos.com/latest/js-dos.css" />
+    <style>
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      :root {
+        /* --ink: #1a1008; */
+        --ink: #000000;
+        --paper: #f5ede0;
+        --gold: #c8922a;
+        --red: #8b1a1a;
+        --muted: #7a6a54;
+      }
+
+      html,
+      body {
+        height: 100%;
+        background: var(--ink);
+        color: var(--paper);
+        font-family: "Noto Serif TC", serif;
+      }
+
+      body {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+      }
+
+      /* ── Header ── */
+      header {
+        width: 100%;
+        max-width: 900px;
+        padding: 24px 24px 0;
+        display: flex;
+        align-items: baseline;
+        gap: 14px;
+      }
+      header h1 {
+        font-size: clamp(1.3rem, 3.5vw, 1.8rem);
+        font-weight: 700;
+        letter-spacing: 0.15em;
+        color: var(--gold);
+      }
+      header span {
+        font-size: 0.8rem;
+        color: var(--muted);
+        letter-spacing: 0.05em;
+      }
+
+      hr.div {
+        width: calc(100% - 48px);
+        max-width: 900px;
+        margin: 12px 0 16px;
+        border: none;
+        border-top: 1px solid #3a2e1e;
+      }
+
+      /* ── Emulator ── */
+      #dos-wrapper {
+        width: 100%;
+        max-width: 900px;
+        padding: 0 24px;
+      }
+      /* js-dos 會接管這個 div，讓它填滿寬度，高度維持 4:3 */
+      #dos {
+        width: 100%;
+        aspect-ratio: 4 / 3;
+      }
+
+      /* ── Controls ── */
+      .controls {
+        width: 100%;
+        max-width: 900px;
+        padding: 12px 24px;
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        align-items: center;
+      }
+      .btn {
+        background: transparent;
+        border: 1px solid var(--muted);
+        color: var(--paper);
+        font-family: inherit;
+        font-size: 0.78rem;
+        letter-spacing: 0.08em;
+        padding: 6px 16px;
+        border-radius: 2px;
+        cursor: pointer;
+        transition:
+          border-color 0.18s,
+          color 0.18s;
+      }
+      .btn:hover {
+        border-color: var(--gold);
+        color: var(--gold);
+      }
+      .btn:active {
+        opacity: 0.7;
+      }
+      .btn.primary {
+        border-color: var(--gold);
+        color: var(--gold);
+      }
+      .btn.primary:hover {
+        background: var(--gold);
+        color: var(--ink);
+      }
+      .btn.danger {
+        border-color: #5a2020;
+        color: #c07070;
+      }
+      .btn.danger:hover {
+        border-color: var(--red);
+        color: #e08080;
+      }
+
+      /* ── Tips ── */
+      .tips {
+        width: 100%;
+        max-width: 900px;
+        padding: 4px 24px 28px;
+      }
+      .tips h2 {
+        font-size: 0.68rem;
+        letter-spacing: 0.18em;
+        color: var(--muted);
+        text-transform: uppercase;
+        margin-bottom: 8px;
+      }
+      .tips ul {
+        list-style: none;
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+      }
+      .tips li {
+        font-size: 0.8rem;
+        color: #a09080;
+        line-height: 1.6;
+      }
+      .tips li::before {
+        content: "— ";
+        color: var(--gold);
+      }
+
+      /* ── Toast ── */
+      #toast {
+        position: fixed;
+        bottom: 24px;
+        left: 50%;
+        transform: translateX(-50%) translateY(12px);
+        background: #2a1e0e;
+        border: 1px solid var(--gold);
+        color: var(--gold);
+        font-size: 0.8rem;
+        letter-spacing: 0.05em;
+        padding: 9px 22px;
+        border-radius: 2px;
+        opacity: 0;
+        transition:
+          opacity 0.25s,
+          transform 0.25s;
+        pointer-events: none;
+        white-space: nowrap;
+        z-index: 9999;
+      }
+      #toast.show {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>金庸群俠傳</h1>
+      <span>Heroes of Jin Yong · DOS 1996</span>
+    </header>
+    <hr class="div" />
+
+    <div id="dos-wrapper">
+      <div id="dos"></div>
+    </div>
+
+    <div class="controls">
+      <button class="btn primary" onclick="startGame()">▶ 啟動遊戲</button>
+      <button class="btn" onclick="toggleFS()">⛶ 全螢幕</button>
+      <button class="btn" onclick="saveGame()">💾 儲存進度</button>
+      <button class="btn danger" onclick="resetGame()">↺ 重置遊戲</button>
+    </div>
+
+    <div class="tips">
+      <h2>操作提示</h2>
+      <ul>
+        <li>先在遊戲內存檔（F5 或遊戲選單），再按「儲存進度」寫入瀏覽器</li>
+        <li>存檔儲存於瀏覽器本地，清除瀏覽器資料會遺失進度</li>
+        <li>方向鍵移動，Enter 確認，Esc 取消或開選單</li>
+        <li>重置遊戲會刪除所有本地存檔，回到初始狀態</li>
+      </ul>
+    </div>
+
+    <div id="toast"></div>
+
+    <script src="https://v8.js-dos.com/latest/js-dos.js"></script>
+    <script>
+      let gameCI = null; // 儲存 CommandInterface（避免與 js-dos 內部的 ci 衝突）
+
+      // Dos() 是同步的，回傳 DosProps
+      const props = Dos(document.getElementById("dos"), {
+        url: "./JINYONG.jsdos",
+        autoStart: true,
+        autoSave: true,
+        theme: "dark",
+        renderAspect: "4/3",
+        imageRendering: "pixelated",
+        onEvent: (event, arg) => {
+          if (event === "ci-ready") {
+            gameCI = arg; // 取得 CommandInterface
+            showToast("遊戲載入完成 ✓");
+          }
+        },
+      });
+
+      // 全螢幕（使用 js-dos 官方 API）
+      function toggleFS() {
+        const isFS = !!document.fullscreenElement;
+        props.setFullScreen(!isFS);
+      }
+
+      // 啟動遊戲：模擬在 DOS 提示字元輸入 "call play.bat" + Enter
+      function startGame() {
+        if (!gameCI) {
+          showToast("模擬器尚未就緒，請稍候");
+          return;
+        }
+
+        const text = "call play.bat";
+
+        // 字元 → KeyboardEvent keyCode 對照
+        const charToKey = (ch) => {
+          if (ch === " ") return [32, false];
+          if (ch >= "a" && ch <= "z") return [ch.toUpperCase().charCodeAt(0), false];
+          if (ch >= "A" && ch <= "Z") return [ch.charCodeAt(0), true];
+          const map = { ".": [190, false], _: [189, true] };
+          return map[ch] || [ch.charCodeAt(0), false];
+        };
+
+        let delay = 0;
+        for (const ch of text) {
+          setTimeout(() => {
+            const [code, shift] = charToKey(ch);
+            if (shift) gameCI.sendKeyEvent(16, true);
+            gameCI.sendKeyEvent(code, true);
+            gameCI.sendKeyEvent(code, false);
+            if (shift) gameCI.sendKeyEvent(16, false);
+          }, delay);
+          delay += 80;
+        }
+
+        // 最後送 Enter（keyCode 13）
+        setTimeout(() => {
+          gameCI.sendKeyEvent(13, true);
+          gameCI.sendKeyEvent(13, false);
+          showToast("已送出啟動指令");
+        }, delay);
+      }
+
+      // 儲存進度（官方 API：props.save()）
+      function saveGame() {
+        showToast("儲存中...");
+        props
+          .save()
+          .then((ok) => {
+            showToast(ok ? "✓ 進度已儲存" : "儲存失敗，請再試");
+          })
+          .catch(() => showToast("儲存失敗"));
+      }
+
+      // 重置：清除 OPFS / IndexedDB 後重新載入
+      function resetGame() {
+        if (!confirm("確定要重置遊戲？所有存檔將被刪除。")) return;
+        // 先停止模擬器
+        props.stop().then(() => {
+          // 清除 IndexedDB
+          indexedDB
+            .databases()
+            .then((dbs) => {
+              const dels = dbs.map(
+                (db) =>
+                  new Promise((r) => {
+                    const req = indexedDB.deleteDatabase(db.name);
+                    req.onsuccess = req.onerror = r;
+                  }),
+              );
+              return Promise.all(dels);
+            })
+            .then(() => {
+              showToast("已重置，重新載入中...");
+              setTimeout(() => location.reload(), 900);
+            });
+        });
+      }
+
+      // Toast
+      function showToast(msg) {
+        const t = document.getElementById("toast");
+        t.textContent = msg;
+        t.classList.add("show");
+        clearTimeout(t._t);
+        t._t = setTimeout(() => t.classList.remove("show"), 2600);
+      }
+    </script>
+  </body>
+</html>
