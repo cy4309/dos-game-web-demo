@@ -496,7 +496,7 @@
     <script type="module">
       import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
       import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signInWithPopup, GoogleAuthProvider, signOut } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-      import { getFirestore, doc, getDoc, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+      import { getFirestore, doc, getDoc, setDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
       const firebaseConfig = {
         apiKey: "AIzaSyAc4w4HiAbt3hmpwTkoszUx4S_Z9Vgtp74",
@@ -667,23 +667,22 @@
         const chunkCount = Math.ceil(bytes.length / CHUNK_BYTES);
         const metaSnap = await getDoc(doc(db, "saves", uid));
         const oldCount = metaSnap.data()?.chunkCount || 0;
-        const batch = writeBatch(db);
 
+        // 每個 chunk 單獨寫入，避免單次請求超過 Firestore ~10MB 上限
         for (let i = 0; i < chunkCount; i++) {
           const start = i * CHUNK_BYTES;
           const slice = bytes.subarray(start, Math.min(start + CHUNK_BYTES, bytes.length));
-          batch.set(doc(db, "saves", uid, "chunks", String(i)), { data: bytesToBase64(slice) });
+          await setDoc(doc(db, "saves", uid, "chunks", String(i)), { data: bytesToBase64(slice) });
         }
         for (let i = chunkCount; i < oldCount; i++) {
-          batch.delete(doc(db, "saves", uid, "chunks", String(i)));
+          await deleteDoc(doc(db, "saves", uid, "chunks", String(i)));
         }
-        batch.set(doc(db, "saves", uid), {
+        await setDoc(doc(db, "saves", uid), {
           version: 3,
           chunkCount,
           size: bytes.length,
           savedAt: new Date().toISOString(),
         });
-        await batch.commit();
       }
 
       async function loadChunksFromFirestore(uid, chunkCount) {
