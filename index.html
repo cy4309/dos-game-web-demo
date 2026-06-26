@@ -549,22 +549,47 @@
         }).then((r) => r.isConfirmed);
 
       const BUNDLE_KEY = "JINYONG.jsdos";
+      let restoredFromCloud = false;
+
+      async function fetchCloudSave() {
+        if (!auth.currentUser) return null;
+        const token = await auth.currentUser.getIdToken();
+        const res = await fetch(`${WORKER_URL}/save`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.status === 404) return null;
+        if (!res.ok) throw new Error(`下載失敗 (${res.status})：${await res.text()}`);
+        return new Uint8Array(await res.arrayBuffer());
+      }
 
       // ── js-dos ──
       function initDos() {
+        restoredFromCloud = false;
         dosProps = Dos(document.getElementById("dos"), {
           url: `./${BUNDLE_KEY}`,
           autoStart: true,
           autoSave: true,
-          kiosk: true, // 用來控制dosjs side bar 的顯示與否
-          noCloud: true, // 用來控制dosjs 存檔的顯示與否
+          kiosk: true,
+          noCloud: true,
+          fsChanges: {
+            local: true,
+            // 由 js-dos 在啟動時呼叫，從 R2 拉取存檔（無痕／換網域時 OPFS 是空的）
+            pull: async () => {
+              const data = await fetchCloudSave();
+              if (data?.length) {
+                restoredFromCloud = true;
+                return data;
+              }
+              return null;
+            },
+          },
           theme: "dark",
           renderAspect: "4/3",
           imageRendering: "pixelated",
           onEvent: (event, arg) => {
             if (event === "ci-ready") {
               gameCI = arg;
-              toast("success", "遊戲載入完成");
+              toast("success", restoredFromCloud ? "已還原雲端存檔" : "遊戲載入完成");
             }
           },
         });
@@ -579,12 +604,6 @@
           appScreen.hidden = false;
           document.getElementById("user-email").textContent = user.email || user.displayName;
           if (!dosProps) {
-            try {
-              const restored = await downloadSave();
-              if (restored) toast("success", "已還原雲端存檔");
-            } catch (e) {
-              console.warn("無雲端存檔或還原失敗", e);
-            }
             initDos();
           }
         } else {
@@ -673,15 +692,11 @@
         }
       }
 
-      /** @returns {Promise<boolean>} 有雲端存檔並寫入 OPFS */
+      /** @returns {Promise<boolean>} 有雲端存檔並寫入 OPFS（除錯用） */
       async function downloadSave() {
-        const token = await auth.currentUser.getIdToken();
-        const res = await fetch(`${WORKER_URL}/save`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (res.status === 404) return false;
-        if (!res.ok) throw new Error((await res.text()) || res.statusText);
-        await writeChangesToOPFS(await res.arrayBuffer());
+        const data = await fetchCloudSave();
+        if (!data) return false;
+        await writeChangesToOPFS(data);
         return true;
       }
 
