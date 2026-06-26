@@ -511,6 +511,7 @@
       const auth = getAuth(app);
       const db = getFirestore(app);
       const gProvider = new GoogleAuthProvider();
+      gProvider.setCustomParameters({ prompt: "select_account" });
 
       let gameCI = null;
       let dosProps = null;
