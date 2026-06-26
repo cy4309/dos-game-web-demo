@@ -547,10 +547,12 @@
           cancelButtonText: "取消",
         }).then((r) => r.isConfirmed);
 
+      const BUNDLE_KEY = "JINYONG.jsdos";
+
       // ── js-dos ──
       function initDos() {
         dosProps = Dos(document.getElementById("dos"), {
-          url: "./JINYONG.jsdos",
+          url: `./${BUNDLE_KEY}`,
           autoStart: true,
           autoSave: true,
           kiosk: true, // 用來控制dosjs side bar 的顯示與否
@@ -605,16 +607,47 @@
         }
       });
 
-      // ── OPFS ──
-      async function readChangesFromOPFS() {
-        const root = await navigator.storage.getDirectory();
-        const jsdos = await root.getDirectoryHandle("jsdos");
-        const file = await jsdos.getFileHandle("JINYONG.jsdos.changes");
-        const buf = await (await file.getFile()).arrayBuffer();
-        const bytes = new Uint8Array(buf);
+      // ── OPFS / 存檔資料 ──
+      function bytesToBase64(bytes) {
         let binary = "";
         bytes.forEach((b) => (binary += String.fromCharCode(b)));
         return btoa(binary);
+      }
+
+      function authErrorMessage(e) {
+        const code = e?.code || "";
+        if (code === "permission-denied") {
+          return "Firestore 權限不足，請至 Firebase Console 設定安全規則（見專案 firestore.rules）";
+        }
+        if (code === "unavailable") return "無法連線 Firestore，請稍後再試";
+        return e.message;
+      }
+
+      async function readChangesFromOPFS() {
+        const root = await navigator.storage.getDirectory();
+        const jsdos = await root.getDirectoryHandle("jsdos");
+        const file = await jsdos.getFileHandle(`${BUNDLE_KEY}.changes`);
+        const buf = await (await file.getFile()).arrayBuffer();
+        return bytesToBase64(new Uint8Array(buf));
+      }
+
+      async function getChangesBase64() {
+        await dosProps.save();
+
+        for (const key of [BUNDLE_KEY, `./${BUNDLE_KEY}`]) {
+          const changes = await dosProps.getLocalChanges(key);
+          if (changes?.length) return bytesToBase64(changes);
+        }
+
+        try {
+          return await readChangesFromOPFS();
+        } catch (opfsErr) {
+          if (gameCI?.persist) {
+            const bundle = await gameCI.persist(true);
+            if (bundle?.length) return bytesToBase64(new Uint8Array(bundle));
+          }
+          throw opfsErr;
+        }
       }
 
       async function writeChangesToOPFS(base64) {
@@ -623,7 +656,7 @@
         for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
         const root = await navigator.storage.getDirectory();
         const jsdos = await root.getDirectoryHandle("jsdos", { create: true });
-        const file = await jsdos.getFileHandle("JINYONG.jsdos.changes", { create: true });
+        const file = await jsdos.getFileHandle(`${BUNDLE_KEY}.changes`, { create: true });
         const w = await file.createWritable();
         await w.write(bytes.buffer);
         await w.close();
@@ -635,10 +668,13 @@
           toast("error", "請先登入");
           return;
         }
+        if (!dosProps) {
+          toast("error", "遊戲尚未載入完成");
+          return;
+        }
         toast("info", "儲存中...");
         try {
-          await dosProps.save();
-          const base64 = await readChangesFromOPFS();
+          const base64 = await getChangesBase64();
           await setDoc(doc(db, "saves", auth.currentUser.uid), {
             changes: base64,
             savedAt: new Date().toISOString(),
@@ -646,7 +682,11 @@
           toast("success", "進度已儲存至雲端");
         } catch (e) {
           console.error(e);
-          toast("error", "儲存失敗：" + e.message);
+          if (e?.name === "NotFoundError") {
+            toast("warning", "尚無遊戲進度可儲存，請先在遊戲內存檔");
+            return;
+          }
+          toast("error", "儲存失敗：" + authErrorMessage(e));
         }
       };
 
@@ -673,7 +713,7 @@
         gameCI = null;
         const root = await navigator.storage.getDirectory();
         const jsdos = await root.getDirectoryHandle("jsdos").catch(() => null);
-        if (jsdos) await jsdos.removeEntry("JINYONG.jsdos.changes").catch(() => {});
+        if (jsdos) await jsdos.removeEntry(`${BUNDLE_KEY}.changes`).catch(() => {});
         toast("success", "已重置，重新載入中...");
         setTimeout(() => location.reload(), 1200);
       };
