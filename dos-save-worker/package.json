@@ -2,7 +2,14 @@
   "name": "dos-save-worker",
   "private": true,
   "type": "module",
+  "scripts": {
+    "login": "wrangler login",
+    "deploy": "wrangler deploy"
+  },
   "dependencies": {
     "jose": "^5.9.6"
+  },
+  "devDependencies": {
+    "wrangler": "^4.14.0"
   }
 }

@@ -12,7 +12,8 @@ Cloudflare Worker + R2，負責驗證 Firebase ID Token 並讀寫遊戲存檔。
 ```bash
 cd dos-save-worker
 npm install
-wrangler deploy
+npm run login    # 或：npx wrangler login（會開瀏覽器登入 Cloudflare）
+npm run deploy   # 或：npx wrangler deploy
 ```
 
 部署後記下 URL，例如：`https://dos-save-worker.<帳號>.workers.dev`
