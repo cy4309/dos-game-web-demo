@@ -496,7 +496,7 @@
     <script type="module">
       import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
       import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signInWithPopup, GoogleAuthProvider, signOut } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-      import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+      import { getFirestore, doc, getDoc, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
       const firebaseConfig = {
         apiKey: "AIzaSyAc4w4HiAbt3hmpwTkoszUx4S_Z9Vgtp74",
@@ -548,6 +548,8 @@
         }).then((r) => r.isConfirmed);
 
       const BUNDLE_KEY = "JINYONG.jsdos";
+      // Firestore 單一文件上限 1MB，大檔拆成多個 chunk（免費方案可用）
+      const CHUNK_BYTES = 600_000;
 
       // ── js-dos ──
       function initDos() {
@@ -579,11 +581,8 @@
           document.getElementById("user-email").textContent = user.email || user.displayName;
           if (!dosProps) {
             try {
-              const snap = await getDoc(doc(db, "saves", user.uid));
-              if (snap.exists()) {
-                await writeChangesToOPFS(snap.data().changes);
-                toast("success", "已還原雲端存檔");
-              }
+              const restored = await restoreCloudSave(user.uid);
+              if (restored) toast("success", "已還原雲端存檔");
             } catch (e) {
               console.warn("無雲端存檔或還原失敗", e);
             }
@@ -607,59 +606,125 @@
         }
       });
 
-      // ── OPFS / 存檔資料 ──
+      // ── OPFS / 雲端存檔 ──
       function bytesToBase64(bytes) {
         let binary = "";
-        bytes.forEach((b) => (binary += String.fromCharCode(b)));
+        for (let i = 0; i < bytes.length; i += 0x8000) {
+          binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+        }
         return btoa(binary);
+      }
+
+      function base64ToBytes(b64) {
+        const binary = atob(b64);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        return bytes;
       }
 
       function authErrorMessage(e) {
         const code = e?.code || "";
         if (code === "permission-denied") {
-          return "Firestore 權限不足，請至 Firebase Console 設定安全規則（見專案 firestore.rules）";
+          return "Firestore 權限不足，請至 Firebase Console 設定安全規則（見 firestore.rules）";
         }
         if (code === "unavailable") return "無法連線 Firestore，請稍後再試";
         return e.message;
       }
 
-      async function readChangesFromOPFS() {
+      async function writeChangesToOPFS(bytes) {
         const root = await navigator.storage.getDirectory();
-        const jsdos = await root.getDirectoryHandle("jsdos");
-        const file = await jsdos.getFileHandle(`${BUNDLE_KEY}.changes`);
-        const buf = await (await file.getFile()).arrayBuffer();
-        return bytesToBase64(new Uint8Array(buf));
+        const jsdos = await root.getDirectoryHandle("jsdos", { create: true });
+        const file = await jsdos.getFileHandle(`${BUNDLE_KEY}.changes`, { create: true });
+        const w = await file.createWritable();
+        await w.write(bytes);
+        await w.close();
       }
 
-      async function getChangesBase64() {
+      async function getChangesBytes() {
         await dosProps.save();
 
         for (const key of [BUNDLE_KEY, `./${BUNDLE_KEY}`]) {
           const changes = await dosProps.getLocalChanges(key);
-          if (changes?.length) return bytesToBase64(changes);
+          if (changes?.length) return changes;
         }
 
         try {
-          return await readChangesFromOPFS();
+          const root = await navigator.storage.getDirectory();
+          const jsdos = await root.getDirectoryHandle("jsdos");
+          const file = await jsdos.getFileHandle(`${BUNDLE_KEY}.changes`);
+          const buf = await (await file.getFile()).arrayBuffer();
+          return new Uint8Array(buf);
         } catch (opfsErr) {
           if (gameCI?.persist) {
             const bundle = await gameCI.persist(true);
-            if (bundle?.length) return bytesToBase64(new Uint8Array(bundle));
+            if (bundle?.length) return new Uint8Array(bundle);
           }
           throw opfsErr;
         }
       }
 
-      async function writeChangesToOPFS(base64) {
-        const binary = atob(base64);
-        const bytes = new Uint8Array(binary.length);
-        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-        const root = await navigator.storage.getDirectory();
-        const jsdos = await root.getDirectoryHandle("jsdos", { create: true });
-        const file = await jsdos.getFileHandle(`${BUNDLE_KEY}.changes`, { create: true });
-        const w = await file.createWritable();
-        await w.write(bytes.buffer);
-        await w.close();
+      async function saveChunksToFirestore(uid, bytes) {
+        const chunkCount = Math.ceil(bytes.length / CHUNK_BYTES);
+        const metaSnap = await getDoc(doc(db, "saves", uid));
+        const oldCount = metaSnap.data()?.chunkCount || 0;
+        const batch = writeBatch(db);
+
+        for (let i = 0; i < chunkCount; i++) {
+          const start = i * CHUNK_BYTES;
+          const slice = bytes.subarray(start, Math.min(start + CHUNK_BYTES, bytes.length));
+          batch.set(doc(db, "saves", uid, "chunks", String(i)), { data: bytesToBase64(slice) });
+        }
+        for (let i = chunkCount; i < oldCount; i++) {
+          batch.delete(doc(db, "saves", uid, "chunks", String(i)));
+        }
+        batch.set(doc(db, "saves", uid), {
+          version: 3,
+          chunkCount,
+          size: bytes.length,
+          savedAt: new Date().toISOString(),
+        });
+        await batch.commit();
+      }
+
+      async function loadChunksFromFirestore(uid, chunkCount) {
+        const parts = [];
+        for (let i = 0; i < chunkCount; i++) {
+          const snap = await getDoc(doc(db, "saves", uid, "chunks", String(i)));
+          if (!snap.exists()) throw new Error(`缺少存檔區塊 ${i + 1}/${chunkCount}`);
+          parts.push(base64ToBytes(snap.data().data));
+        }
+        const out = new Uint8Array(parts.reduce((sum, p) => sum + p.length, 0));
+        let offset = 0;
+        for (const part of parts) {
+          out.set(part, offset);
+          offset += part.length;
+        }
+        return out;
+      }
+
+      async function restoreCloudSave(uid) {
+        const snap = await getDoc(doc(db, "saves", uid));
+        if (!snap.exists()) return false;
+
+        const data = snap.data();
+
+        if (data.chunkCount) {
+          const bytes = await loadChunksFromFirestore(uid, data.chunkCount);
+          await writeChangesToOPFS(bytes);
+          return true;
+        }
+
+        if (data.storagePath) {
+          console.warn("舊版 Storage 存檔無法在免費方案還原，請重新儲存一次");
+          return false;
+        }
+
+        if (data.changes) {
+          await writeChangesToOPFS(base64ToBytes(data.changes));
+          return true;
+        }
+
+        return false;
       }
 
       // ── 儲存進度 ──
@@ -674,11 +739,8 @@
         }
         toast("info", "儲存中...");
         try {
-          const base64 = await getChangesBase64();
-          await setDoc(doc(db, "saves", auth.currentUser.uid), {
-            changes: base64,
-            savedAt: new Date().toISOString(),
-          });
+          const bytes = await getChangesBytes();
+          await saveChunksToFirestore(auth.currentUser.uid, bytes);
           toast("success", "進度已儲存至雲端");
         } catch (e) {
           console.error(e);
