@@ -634,18 +634,43 @@
         if (jsdos) await jsdos.removeEntry(`${BUNDLE_KEY}.changes`).catch(() => {});
       }
 
-      async function uploadSave() {
+      async function getChangesBuffer() {
+        const saved = await dosProps.save();
+        if (!saved) console.warn("dosProps.save() 回傳 false");
+
+        for (const key of [BUNDLE_KEY, `./${BUNDLE_KEY}`]) {
+          const changes = await dosProps.getLocalChanges(key);
+          if (changes?.length) return changes;
+        }
+
+        try {
+          return await readChangesFromOPFS();
+        } catch {
+          if (gameCI?.persist) {
+            const bundle = await gameCI.persist(true);
+            if (bundle?.byteLength) return new Uint8Array(bundle);
+          }
+          const err = new Error("NotFound");
+          err.name = "NotFoundError";
+          throw err;
+        }
+      }
+
+      async function uploadSave(body) {
+        const data = body ?? (await getChangesBuffer());
         const token = await auth.currentUser.getIdToken();
-        const body = await readChangesFromOPFS();
         const res = await fetch(`${WORKER_URL}/save`, {
           method: "PUT",
           headers: {
             Authorization: `Bearer ${token}`,
             "Content-Type": "application/octet-stream",
           },
-          body,
+          body: data,
         });
-        if (!res.ok) throw new Error((await res.text()) || res.statusText);
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(`上傳失敗 (${res.status})：${text || res.statusText}`);
+        }
       }
 
       /** @returns {Promise<boolean>} 有雲端存檔並寫入 OPFS */
@@ -681,9 +706,9 @@
         }
         toast("info", "儲存中...");
         try {
-          await dosProps.save();
-          await uploadSave();
-          toast("success", "進度已儲存至雲端");
+          const buffer = await getChangesBuffer();
+          await uploadSave(buffer);
+          toast("success", `進度已儲存至雲端（${(buffer.byteLength / 1024 / 1024).toFixed(1)} MB）`);
         } catch (e) {
           console.error(e);
           toast("error", "儲存失敗：" + saveErrorMessage(e));
