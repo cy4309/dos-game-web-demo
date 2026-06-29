@@ -491,7 +491,8 @@
         <h2>操作提示</h2>
         <ul>
           <li>先在遊戲內存檔（遊戲選單），再按「儲存進度」上傳至雲端</li>
-          <li>登入時會自動還原雲端存檔，換裝置登入即可繼續</li>
+          <li>登入時會自動還原雲端存檔；還原後若不在劇情中，請到遊戲選單讀取相同存檔槽</li>
+          <li>登出前請務必按「儲存進度」，否則登入後只會還原上次上傳的進度</li>
           <li>方向鍵移動，Enter 確認，Esc 取消或開選單</li>
         </ul>
       </div>
@@ -605,8 +606,20 @@
       }
 
       // ── js-dos ──
-      function initDos() {
+      async function initDos() {
         restoredFromCloud = false;
+        let cloudData = null;
+        try {
+          cloudData = await fetchCloudSave();
+          if (cloudData?.length) {
+            // 有雲端存檔時清掉本機 OPFS，避免舊的本機進度蓋過雲端
+            await clearLocalChanges();
+            restoredFromCloud = true;
+          }
+        } catch (e) {
+          console.warn("雲端存檔讀取失敗", e);
+        }
+
         dosProps = Dos(document.getElementById("dos"), {
           url: `./${BUNDLE_KEY}`,
           autoStart: true,
@@ -615,15 +628,7 @@
           noCloud: true,
           fsChanges: {
             local: true,
-            // 由 js-dos 在啟動時呼叫，從 R2 拉取存檔（無痕／換網域時 OPFS 是空的）
-            pull: async () => {
-              const data = await fetchCloudSave();
-              if (data?.length) {
-                restoredFromCloud = true;
-                return data;
-              }
-              return null;
-            },
+            pull: async () => (cloudData?.length ? cloudData : null),
           },
           theme: "dark",
           renderAspect: "4/3",
@@ -646,7 +651,7 @@
           appScreen.hidden = false;
           document.getElementById("user-email").textContent = user.email || user.displayName;
           if (!dosProps) {
-            initDos();
+            await initDos();
           }
         } else {
           loginScreen.style.display = "flex";
@@ -662,6 +667,7 @@
           document.getElementById("dos").innerHTML = "";
           dosProps = null;
           gameCI = null;
+          await clearLocalChanges();
           resetEmailLoginPanel();
         }
       });
@@ -699,6 +705,11 @@
         const saved = await dosProps.save();
         if (!saved) console.warn("dosProps.save() 回傳 false");
 
+        if (gameCI?.persist) {
+          const bundle = await gameCI.persist(true);
+          if (bundle?.byteLength) return new Uint8Array(bundle);
+        }
+
         for (const key of [BUNDLE_KEY, `./${BUNDLE_KEY}`]) {
           const changes = await dosProps.getLocalChanges(key);
           if (changes?.length) return changes;
@@ -707,10 +718,6 @@
         try {
           return await readChangesFromOPFS();
         } catch {
-          if (gameCI?.persist) {
-            const bundle = await gameCI.persist(true);
-            if (bundle?.byteLength) return new Uint8Array(bundle);
-          }
           const err = new Error("NotFound");
           err.name = "NotFoundError";
           throw err;
