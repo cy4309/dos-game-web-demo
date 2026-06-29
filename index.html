@@ -235,6 +235,11 @@
       .btn:active {
         opacity: 0.7;
       }
+      .btn:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+        pointer-events: none;
+      }
       .btn.primary {
         border-color: var(--gold);
         color: var(--gold);
@@ -461,7 +466,7 @@
         <div class="ctrl-divider"></div>
         <div class="ctrl-group">
           <span class="ctrl-label">遊戲進度</span>
-          <button class="btn primary" onclick="saveGame()">
+          <button id="btn-save-game" class="btn primary" onclick="saveGame()">
             <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
               <polyline points="17 21 17 13 7 13 7 21" />
@@ -547,6 +552,43 @@
           confirmButtonText: confirmText,
           cancelButtonText: "取消",
         }).then((r) => r.isConfirmed);
+
+      const saveWarnHint = '<p style="margin-top:12px;font-size:0.85rem;color:#7a6a54">請勿關閉或重新整理頁面</p>';
+
+      let isSaving = false;
+      let saveLeaveGuard = null;
+
+      function showSavingDialog(html) {
+        return Swal.fire({
+          ...swalBase,
+          title: "存檔中",
+          html: html + saveWarnHint,
+          allowOutsideClick: false,
+          allowEscapeKey: false,
+          showConfirmButton: false,
+          didOpen: () => Swal.showLoading(),
+        });
+      }
+
+      function updateSavingDialog(html) {
+        const el = Swal.getHtmlContainer();
+        if (el) el.innerHTML = html + saveWarnHint;
+      }
+
+      function startSaveLeaveGuard() {
+        saveLeaveGuard = (e) => {
+          e.preventDefault();
+          e.returnValue = "";
+        };
+        window.addEventListener("beforeunload", saveLeaveGuard);
+      }
+
+      function stopSaveLeaveGuard() {
+        if (saveLeaveGuard) {
+          window.removeEventListener("beforeunload", saveLeaveGuard);
+          saveLeaveGuard = null;
+        }
+      }
 
       const BUNDLE_KEY = "JINYONG.jsdos";
       let restoredFromCloud = false;
@@ -675,13 +717,13 @@
         }
       }
 
-      async function uploadSave(body) {
+      async function uploadSave(body, token) {
         const data = body ?? (await getChangesBuffer());
-        const token = await auth.currentUser.getIdToken();
+        const authToken = token ?? (await auth.currentUser.getIdToken());
         const res = await fetch(`${WORKER_URL}/save`, {
           method: "PUT",
           headers: {
-            Authorization: `Bearer ${token}`,
+            Authorization: `Bearer ${authToken}`,
             "Content-Type": "application/octet-stream",
           },
           body: data,
@@ -719,14 +761,30 @@
           toast("error", "遊戲尚未載入完成");
           return;
         }
-        toast("info", "儲存中...");
+        if (isSaving) return;
+
+        isSaving = true;
+        const saveBtn = document.getElementById("btn-save-game");
+        saveBtn.disabled = true;
+        startSaveLeaveGuard();
+        showSavingDialog("正在準備遊戲進度…");
+
         try {
+          const tokenPromise = auth.currentUser.getIdToken();
           const buffer = await getChangesBuffer();
-          await uploadSave(buffer);
-          toast("success", `進度已儲存至雲端（${(buffer.byteLength / 1024 / 1024).toFixed(1)} MB）`);
+          const mb = (buffer.byteLength / 1024 / 1024).toFixed(1);
+          updateSavingDialog(`正在上傳至雲端（${mb} MB）…`);
+          await uploadSave(buffer, await tokenPromise);
+          Swal.close();
+          toast("success", `進度已儲存至雲端（${mb} MB）`);
         } catch (e) {
           console.error(e);
+          Swal.close();
           toast("error", "儲存失敗：" + saveErrorMessage(e));
+        } finally {
+          isSaving = false;
+          saveBtn.disabled = false;
+          stopSaveLeaveGuard();
         }
       };
 
